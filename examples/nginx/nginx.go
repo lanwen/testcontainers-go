@@ -10,35 +10,35 @@ import (
 )
 
 type nginxContainer struct {
-	testcontainers.Container
+	*testcontainers.StartedContainer
 	URI string
 }
 
 func startContainer(ctx context.Context) (*nginxContainer, error) {
-	req := testcontainers.ContainerRequest{
-		Image:        "nginx",
-		ExposedPorts: []string{"80/tcp"},
-		WaitingFor:   wait.ForHTTP("/").WithStartupTimeout(10 * time.Second),
-	}
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
+	//testcontainers.NewGenericContainer(testcontainers.FromDockerfile("Dockerfile", testcontainers.OnFileSystem("."))) //source?
+	//testcontainers.NewGenericContainer(testcontainers.FromDockerfile("Dockerfile", testcontainers.FromContext(tar)))
+	//testcontainers.NewGenericContainer(testcontainers.FromDockerfile("Dockerfile", testcontainers.FromFS(fs))) //embedded fs
+
+	container, err := testcontainers.Run(
+		testcontainers.NewGenericContainer(
+			testcontainers.FromImage("nginx", testcontainers.WithImagePlatform("linux/amd64")),
+			testcontainers.WithExposedPorts("80/tcp"),
+			testcontainers.WaitingFor(wait.ForLog("Server ready").WithStartupTimeout(10*time.Second)),
+		),
+		testcontainers.WithContext(ctx),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	ip, err := container.Host(ctx)
+	info, err := testcontainers.Info(container, testcontainers.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}
 
-	mappedPort, err := container.MappedPort(ctx, "80")
-	if err != nil {
-		return nil, err
-	}
+	uri := fmt.Sprintf("http://%s:%s", info.Host(), info.MappedPort("80"))
 
-	uri := fmt.Sprintf("http://%s:%s", ip, mappedPort.Port())
+	//startedSet = testcontainers.Up(testcontainers.NewContainerSet(c))
 
-	return &nginxContainer{Container: container, URI: uri}, nil
+	return &nginxContainer{StartedContainer: container, URI: uri}, nil
 }
